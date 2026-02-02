@@ -237,6 +237,7 @@ MIT License — free for educational and portfolio use.
 - [HL7 FHIR Resource Index](https://build.fhir.org/resourcelist.html)
 - [Contributions](CONTRIBUTING.md)
 - [fhir.resources 8.1.0](https://pypi.org/project/fhir.resources/)
+- [Faker 40.1.2](https://pypi.org/project/Faker/)
   
 
 ---
