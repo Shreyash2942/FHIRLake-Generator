@@ -472,6 +472,39 @@ class LocationGenerator:
         return None
 
 
+# -------------------------------------------------
+# NEW-STYLE ENTRYPOINT (REQUIRED BY CORE ENGINE)
+# -------------------------------------------------
+
+def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, Any]]:
+    """
+    Core Engine contract:
+      generate(ctx, store, inputs, count) -> list[dict]
+
+    - Generates 'count' locations
+    - Converts FHIR object -> dict
+    - Registers IDs into ResourceStore pools
+    """
+    resources: List[Dict[str, Any]] = []
+    gen = LocationGenerator(seed=getattr(ctx, "seed", None))
+
+    for _ in range(int(count)):
+        loc_obj = gen.generate_location()
+
+        if hasattr(loc_obj, "model_dump"):
+            loc_dict = loc_obj.model_dump(exclude_none=True)
+        else:
+            loc_dict = loc_obj.dict(exclude_none=True)
+
+        lid = loc_dict.get("id")
+        if lid:
+            store.register_id("Location", lid)
+
+        resources.append(loc_dict)
+
+    return resources
+
+
 # ----------------------------
 # Example usage (quick test)
 # ----------------------------

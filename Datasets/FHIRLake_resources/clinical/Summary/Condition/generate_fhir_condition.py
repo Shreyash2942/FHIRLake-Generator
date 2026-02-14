@@ -2,6 +2,7 @@ import json
 import pprint
 import uuid
 import random
+from typing import Dict, Any, List
 from datetime import datetime, timedelta, timezone
 
 from faker import Faker
@@ -16,7 +17,12 @@ from fhir.resources.age import Age
 from fhir.resources.period import Period
 from fhir.resources.range import Range
 from fhir.resources.quantity import Quantity
-from fhir.resources.codeablereference import CodeableReference
+
+# CodeableReference may be optional depending on fhir.resources build
+try:
+    from fhir.resources.codeablereference import CodeableReference
+except Exception:
+    CodeableReference = None
 
 # Config
 from Datasets.Configs.config_fhir import (
@@ -43,7 +49,7 @@ def fhir_datetime(dt: datetime) -> str:
 def note_kv(key: str, value: str) -> Annotation:
     """
     Store non-supported/extra contract fields as structured Annotation.
-    This keeps your dataset contract while remaining model-valid.
+    Keeps dataset contract while remaining model-valid.
     """
     return Annotation(authorString=key, text=str(value))
 
@@ -160,6 +166,9 @@ def build_severity() -> CodeableConcept:
     return CodeableConcept(text=str(choice))
 
 
+# ---------------------------------------------------------------------
+# Legacy single-resource builder (kept for reuse)
+# ---------------------------------------------------------------------
 def generate_condition(patient_id: str, encounter_id: str) -> Condition:
     patient_id = str(patient_id)
     encounter_id = str(encounter_id)
@@ -186,33 +195,33 @@ def generate_condition(patient_id: str, encounter_id: str) -> Condition:
         [("problem-list-item", "Problem List Item"), ("encounter-diagnosis", "Encounter Diagnosis")]
     )
 
-    # Supported FHIR evidence (your model expects CodeableReference)
-    evidence = [
-        CodeableReference(
-            concept=CodeableConcept(text="Lab confirmation"),
-            reference=Reference(reference="Observation/example"),
-        )
-    ]
+    # Supported FHIR evidence (R5 commonly expects CodeableReference)
+    if CodeableReference:
+        evidence = [
+            CodeableReference(
+                concept=CodeableConcept(text="Lab confirmation"),
+                reference=Reference(reference="Observation/example"),
+            )
+        ]
+    else:
+        # fallback for builds without CodeableReference
+        evidence = [{"concept": {"text": "Lab confirmation"}, "reference": {"reference": "Observation/example"}}]
 
-    # ----------------------------
-    # Notes: include schema + unsupported fields
-    # ----------------------------
+    # Notes: schema + unsupported contract fields
     notes = [
-        # regular notes
         Annotation(text="Synthetic condition for analytics"),
         Annotation(text=f"Schema version {VERSION_INFO.get('schema_version', '1.0')}"),
 
-        # ✅ Keep your dataset-contract / unsupported fields here:
+        # Contract-preserving notes (unsupported fields)
         note_kv("unsupported.bodyStructure", "BodyStructure/example"),
         note_kv("unsupported.recorder", "Practitioner/example"),
         note_kv("unsupported.asserter", "Practitioner/example"),
 
-        # ✅ Also store R4-style evidence shape as your contract expects (optional but useful)
+        # Optional: store R4-style evidence shape
         note_kv("contract.evidence.code.text", "Lab confirmation"),
         note_kv("contract.evidence.detail.0", "Observation/example"),
     ]
 
-    # Build the condition payload
     condition_data = {
         "resourceType": "Condition",
         "id": str(uuid.uuid4()),
@@ -270,6 +279,52 @@ def generate_condition(patient_id: str, encounter_id: str) -> Condition:
     condition_data.update(build_abatement(abatement_dt))
 
     return Condition(**condition_data)
+
+
+# ---------------------------------------------------------------------
+# ✅ NEW-STYLE ENTRYPOINT (REQUIRED BY CORE ENGINE)
+# ---------------------------------------------------------------------
+def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, Any]]:
+    """
+    Core Engine contract:
+      generate(ctx, store, inputs, count) -> list[dict]
+
+    Required inputs (Resolver must provide):
+      inputs["patient_id"]
+      inputs["encounter_id"]
+
+    - Generates `count` conditions
+    - Converts FHIR object -> dict
+    - Registers Condition IDs into ResourceStore pools
+    """
+    resources: List[Dict[str, Any]] = []
+
+    patient_id = inputs.get("patient_id")
+    encounter_id = inputs.get("encounter_id")
+
+    if not patient_id or not encounter_id:
+        raise ValueError(
+            "Condition generator requires inputs['patient_id'] and inputs['encounter_id'].\n"
+            "Fix: registry spec.required_inputs must include ['patient_id', 'encounter_id'] "
+            "and Planning dependencies must include ['Encounter'] (Encounter depends on Patient)."
+        )
+
+    for _ in range(int(count)):
+        cond_obj = generate_condition(patient_id, encounter_id)
+
+        # Convert FHIR model -> dict safely
+        if hasattr(cond_obj, "model_dump"):
+            cond_dict = cond_obj.model_dump(exclude_none=True)
+        else:
+            cond_dict = cond_obj.dict(exclude_none=True)
+
+        cid = cond_dict.get("id")
+        if cid:
+            store.register_id("Condition", cid)
+
+        resources.append(cond_dict)
+
+    return resources
 
 
 if __name__ == "__main__":

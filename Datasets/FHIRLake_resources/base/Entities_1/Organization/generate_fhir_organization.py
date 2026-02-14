@@ -372,6 +372,39 @@ class OrganizationGenerator:
         return None
 
 
+# -------------------------------------------------
+# NEW-STYLE ENTRYPOINT (REQUIRED BY CORE ENGINE)
+# -------------------------------------------------
+
+def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, Any]]:
+    """
+    Core Engine contract:
+      generate(ctx, store, inputs, count) -> list[dict]
+
+    - Generates 'count' organizations
+    - Converts FHIR object -> dict
+    - Registers IDs into ResourceStore pools
+    """
+    resources: List[Dict[str, Any]] = []
+    gen = OrganizationGenerator(seed=getattr(ctx, "seed", None))
+
+    for _ in range(int(count)):
+        org_obj = gen.generate_organization()
+
+        if hasattr(org_obj, "model_dump"):
+            org_dict = org_obj.model_dump(exclude_none=True)
+        else:
+            org_dict = org_obj.dict(exclude_none=True)
+
+        oid = org_dict.get("id")
+        if oid:
+            store.register_id("Organization", oid)
+
+        resources.append(org_dict)
+
+    return resources
+
+
 # ----------------------------
 # Example usage (quick test)
 # ----------------------------

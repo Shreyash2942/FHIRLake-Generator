@@ -2,7 +2,8 @@ import json
 import pprint
 import uuid
 import random
-from datetime import timedelta, timezone
+from typing import Dict, Any, List
+from datetime import datetime, timedelta, timezone
 
 from faker import Faker
 
@@ -37,12 +38,17 @@ fake = Faker()
 # ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
-def format_fhir_datetime(dt):
+def format_fhir_datetime(dt: datetime) -> str:
     """Format datetime consistently with milliseconds and Z suffix."""
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
-def cc_text(text: str, system: str = None, code: str = None, display: str = None) -> CodeableConcept:
+def cc_text(
+    text: str,
+    system: str = None,
+    code: str = None,
+    display: str = None
+) -> CodeableConcept:
     """Create CodeableConcept with optional Coding."""
     if system and code:
         return CodeableConcept(
@@ -79,10 +85,16 @@ def make_codeable_reference(display_text: str, ref: str = None):
 
 
 # ---------------------------------------------------------------------
-# Main generator
+# Legacy single-resource builder (kept for reuse)
 # ---------------------------------------------------------------------
 def generate_encounter(patient_id: str) -> FHIREncounter:
-    """Generates a FHIR R5 Encounter resource for a given patient (aligned to your installed schema)."""
+    """
+    Generates a FHIR R5 Encounter resource for a given patient.
+    This is the legacy single-resource creator.
+
+    The Core Engine will call the new-style generate(ctx, store, inputs, count)
+    wrapper below.
+    """
 
     # ----------------------------
     # Temporal fields
@@ -247,7 +259,7 @@ def generate_encounter(patient_id: str) -> FHIREncounter:
     account = [make_ref(reference=f"Account/{uuid.uuid4()}")]
 
     # ----------------------------
-    # Virtual service (FIXED: channelType must be Coding, not CodeableConcept)
+    # Virtual service (channelType must be Coding, not CodeableConcept)
     # ----------------------------
     virtual_service = None
     if random.random() < 0.40:
@@ -263,7 +275,6 @@ def generate_encounter(patient_id: str) -> FHIREncounter:
 
     # ----------------------------
     # businessStatus + contained represented via extensions
-    # (because your model does NOT allow businessStatus and does NOT allow note)
     # ----------------------------
     granular_label = random.choice(["admitted", "under-evaluation", "awaiting-tests", "ready-for-discharge"])
     workflow_type = random.choice(["clinical-workflow", "billing-workflow", "admission-workflow"])
@@ -338,9 +349,7 @@ def generate_encounter(patient_id: str) -> FHIREncounter:
         "admission": admission_block,
         "location": [location],
 
-        # Include contained field to “have it present” (empty is valid)
         "contained": [],
-
         "extension": extensions,
     }
 
@@ -348,6 +357,48 @@ def generate_encounter(patient_id: str) -> FHIREncounter:
     payload = {k: v for k, v in payload.items() if v is not None}
 
     return FHIREncounter(**payload)
+
+
+# ---------------------------------------------------------------------
+# ✅ NEW-STYLE ENTRYPOINT (REQUIRED BY CORE ENGINE)
+# ---------------------------------------------------------------------
+def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, Any]]:
+    """
+    Core Engine contract:
+      generate(ctx, store, inputs, count) -> list[dict]
+
+    Required inputs:
+      inputs["patient_id"]  # resolved by Resolver from ResourceStore pools
+
+    - Generates `count` encounters
+    - Converts FHIR object -> dict
+    - Registers Encounter IDs into ResourceStore pools
+    """
+    resources: List[Dict[str, Any]] = []
+
+    patient_id = inputs.get("patient_id")
+    if not patient_id:
+        raise ValueError(
+            "Encounter generator requires inputs['patient_id']. "
+            "Fix: registry spec.required_inputs must include 'patient_id' OR 'Patient' (if your Resolver supports mapping)."
+        )
+
+    for _ in range(int(count)):
+        enc_obj = generate_encounter(patient_id)
+
+        # Convert FHIR model -> dict safely
+        if hasattr(enc_obj, "model_dump"):
+            enc_dict = enc_obj.model_dump(exclude_none=True)
+        else:
+            enc_dict = enc_obj.dict(exclude_none=True)
+
+        eid = enc_dict.get("id")
+        if eid:
+            store.register_id("Encounter", eid)
+
+        resources.append(enc_dict)
+
+    return resources
 
 
 # ---------------------------------------------------------------------

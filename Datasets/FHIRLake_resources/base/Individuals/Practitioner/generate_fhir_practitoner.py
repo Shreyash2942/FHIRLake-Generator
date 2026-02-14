@@ -2,6 +2,7 @@ import json
 import pprint
 import uuid
 import random
+from typing import Any, Dict, List
 from faker import Faker
 from datetime import datetime, timedelta, timezone, date
 
@@ -154,6 +155,38 @@ def generate_practitioner() -> FHIRPractitioner:
     )
 
     return practitioner
+
+
+# -------------------------------------------------
+# NEW-STYLE ENTRYPOINT (REQUIRED BY CORE ENGINE)
+# -------------------------------------------------
+
+def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, Any]]:
+    """
+    Core Engine contract:
+      generate(ctx, store, inputs, count) -> list[dict]
+
+    - Generates 'count' practitioners
+    - Converts FHIR object -> dict
+    - Registers IDs into ResourceStore pools
+    """
+    resources: List[Dict[str, Any]] = []
+
+    for _ in range(int(count)):
+        practitioner_obj = generate_practitioner()
+
+        if hasattr(practitioner_obj, "model_dump"):
+            practitioner_dict = practitioner_obj.model_dump(exclude_none=True)
+        else:
+            practitioner_dict = practitioner_obj.dict(exclude_none=True)
+
+        pid = practitioner_dict.get("id")
+        if pid:
+            store.register_id("Practitioner", pid)
+
+        resources.append(practitioner_dict)
+
+    return resources
 
 
 # ----------------------------

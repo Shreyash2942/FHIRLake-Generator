@@ -2,6 +2,7 @@ import json
 import pprint
 import uuid
 import random
+from typing import Dict, Any, List
 from faker import Faker
 from datetime import datetime, timedelta, timezone, date
 
@@ -14,6 +15,10 @@ from fhir.resources.reference import Reference
 
 # 🧱 Import shared config file
 from Datasets.Configs.config_fhir import HOSPITALS, LANGUAGES, VERSION_INFO
+
+# NOTE:
+# - We keep generate_patient() (legacy single-resource creator).
+# - We ADD generate(ctx, store, inputs, count) to match the Core Engine "new-style" contract.
 
 fake = Faker()
 
@@ -42,6 +47,7 @@ CONTACT_REL = [
     ("emergency", "Emergency Contact"),
 ]
 
+
 def _bcp47_language_code(lang_text: str) -> str:
     """
     FHIR Patient.communication.language is Required binding to BCP-47.
@@ -62,9 +68,9 @@ def _bcp47_language_code(lang_text: str) -> str:
     }
     return mapping.get(lang_text, "en")
 
+
 def _make_marital_status() -> CodeableConcept:
     code, display = random.choice(MARITAL)
-    # v3-MaritalStatus code system commonly used in examples
     return CodeableConcept(
         coding=[{
             "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
@@ -74,35 +80,34 @@ def _make_marital_status() -> CodeableConcept:
         text=display
     )
 
+
 def _make_telecom():
-    # Add phone + email (0..* ContactPoint)
     phone = fake.phone_number()
     email = fake.email()
-
     return [
         {"system": "phone", "value": phone, "use": "mobile"},
         {"system": "email", "value": email, "use": "home"},
     ]
 
+
 def _make_name():
-    # HumanName 0..*
     given1 = fake.first_name()
     given2 = fake.first_name()
     family = fake.last_name()
-
     return [{
         "use": "official",
         "family": family,
         "given": [given1, given2]
     }]
 
+
 def _make_photo(patient_id: str):
-    # Attachment 0..* (use URL placeholder; no real PHI)
     return [{
         "contentType": "image/jpeg",
         "url": f"https://example.org/synthetic/patient-photo/{patient_id}.jpg",
         "title": "Synthetic Patient Photo"
     }]
+
 
 def _make_contact():
     """
@@ -112,6 +117,7 @@ def _make_contact():
     """
     rel_code, rel_display = random.choice(CONTACT_REL)
 
+    org = random.choice(HOSPITALS)
     contact_obj = {
         "relationship": [{
             "coding": [{
@@ -129,17 +135,16 @@ def _make_contact():
         "telecom": [
             {"system": "phone", "value": fake.phone_number(), "use": "mobile"}
         ],
-        # Optional organization reference (use your hospitals)
         "organization": {
-            "reference": f"Organization/{random.choice(HOSPITALS)['id']}",
-            "display": random.choice(HOSPITALS)["name"]
+            "reference": f"Organization/{org['id']}",
+            "display": org["name"]
         },
         "period": {
             "start": datetime.now(timezone.utc).date().isoformat()
         }
     }
 
-    # Optional address for contact (sometimes)
+    # Optional address for contact
     if random.choice([True, False]):
         contact_obj["address"] = {
             "use": "home",
@@ -151,16 +156,18 @@ def _make_contact():
 
     return [contact_obj]
 
+
 def _make_general_practitioner():
     """
     Patient.generalPractitioner 0..* Reference(Organization|Practitioner|PractitionerRole)
-    We’ll point to an Organization for simplicity (you can add Practitioner later).
+    We'll point to an Organization for simplicity.
     """
     org = random.choice(HOSPITALS)
     return [{
         "reference": f"Organization/{org['id']}",
         "display": f"{org['name']} Primary Care"
     }]
+
 
 def _make_link():
     """
@@ -169,20 +176,16 @@ def _make_link():
     type: replaced-by | replaces | refer | seealso
     """
     link_type = random.choice(["seealso", "refer", "replaces", "replaced-by"])
-    # synthetic "other" patient id
     other_id = str(uuid.uuid4())
     return [{
         "other": {"reference": f"Patient/{other_id}"},
         "type": link_type
     }]
 
+
 def _make_multiple_birth():
     """
     multipleBirth[x] 0..1: boolean OR integer
-    We'll randomly choose:
-      - None
-      - boolean True/False
-      - integer birth order (2-4)
     """
     choice = random.choice(["none", "bool", "int"])
     if choice == "none":
@@ -191,7 +194,12 @@ def _make_multiple_birth():
         return {"multipleBirthBoolean": random.choice([True, False])}
     return {"multipleBirthInteger": random.randint(2, 4)}
 
+
 def generate_patient() -> FHIRPatient:
+    """
+    Legacy single-resource builder (kept for backwards compatibility and reuse).
+    The Core engine will call the new-style generate() wrapper below.
+    """
     patient_id = str(uuid.uuid4())
     birth_date = fake.date_of_birth(minimum_age=18, maximum_age=90)
 
@@ -210,10 +218,8 @@ def generate_patient() -> FHIRPatient:
     selected_language = random.choice(LANGUAGES)
     selected_org = random.choice(HOSPITALS)
 
-    # Patient.communication.language must be CodeableConcept; binding uses BCP-47 codes
     lang_code = _bcp47_language_code(selected_language)
 
-    # Build base patient
     patient_dict = dict(
         resourceType="Patient",
         id=patient_id,
@@ -265,32 +271,58 @@ def generate_patient() -> FHIRPatient:
         ),
     )
 
-    # deceased[x]
     if is_deceased and deceased_date:
         patient_dict["deceasedDateTime"] = deceased_date
 
-    # multipleBirth[x]
     patient_dict.update(_make_multiple_birth())
 
-    # photo 0..*
     if random.choice(HAS_PHOTO):
         patient_dict["photo"] = _make_photo(patient_id)
 
-    # contact 0..* (satisfies pat-1)
     if random.choice(HAS_CONTACT):
         patient_dict["contact"] = _make_contact()
 
-    # generalPractitioner 0..*
     if random.choice(HAS_GP):
         patient_dict["generalPractitioner"] = _make_general_practitioner()
 
-    # link 0..*
     if random.choice(HAS_LINK):
         patient_dict["link"] = _make_link()
 
-    # Create FHIR object
-    patient = FHIRPatient(**patient_dict)
-    return patient
+    return FHIRPatient(**patient_dict)
+
+
+# -------------------------------------------------
+# ✅ NEW-STYLE ENTRYPOINT (REQUIRED BY CORE ENGINE)
+# -------------------------------------------------
+
+def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, Any]]:
+    """
+    Core Engine contract:
+      generate(ctx, store, inputs, count) -> list[dict]
+
+    - Generates 'count' patients
+    - Converts FHIR object -> dict
+    - Registers IDs into ResourceStore pools (required for Resolver)
+    """
+    resources: List[Dict[str, Any]] = []
+
+    for _ in range(int(count)):
+        patient_obj = generate_patient()
+
+        # Convert to dict safely
+        if hasattr(patient_obj, "model_dump"):
+            patient_dict = patient_obj.model_dump(exclude_none=True)
+        else:
+            patient_dict = patient_obj.dict(exclude_none=True)
+
+        pid = patient_dict.get("id")
+        if pid:
+            store.register_id("Patient", pid)
+
+        resources.append(patient_dict)
+
+    return resources
+
 
 if __name__ == "__main__":
     patient = generate_patient()
