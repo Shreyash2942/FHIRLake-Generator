@@ -1,1 +1,32 @@
-*OTHERS
+# IDE / editor
+.idea/
+.vscode/
+
+# Python virtualenvs and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Test / coverage
+.tox/
+.coverage
+coverage.xml
+htmlcov/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# Local env
+.env
+.env.*
+
+# Project-specific generated dirs
+OTHERS/
+testing/
+output/
+outputs/

@@ -1,12 +1,12 @@
-# 📦 Exporter Module
+# Exporter Module
 
-The **Exporter module** is responsible for converting generated datasets into **ingestion-ready file formats**.
+The Exporter module is responsible for converting generated datasets into ingestion-ready file formats.
 
-It defines *how data is serialized*, not *where it is stored*. This clear separation ensures that format logic, storage logic, and dataset governance remain independent and scalable.
+It defines how data is serialized, not where it is stored. This clear separation ensures that format logic, storage logic, and dataset governance remain independent and scalable.
 
 ---
 
-## 🎯 Purpose
+## Purpose
 
 The Exporter module exists to:
 
@@ -15,31 +15,31 @@ The Exporter module exists to:
 - Keep format-specific logic isolated and reusable
 - Enable easy extension with new formats without refactoring
 
-The module strictly follows the **dataset-first architecture** and **FHIR-aligned dataset contract** defined in:
+The module strictly follows the dataset-first architecture and FHIR-aligned dataset contract defined in:
 
 - `Datasets/FHIRLake_resources/README.md`
 
 ---
 
-## 🧠 Design Principles
+## Design Principles
 
 The Exporter module follows these core principles:
 
-- **Serialization only**  
+- Serialization only
   Exporters convert in-memory data structures into bytes or text formats.
 
-- **No storage responsibility**  
+- No storage responsibility
   Exporters do not manage file paths, directories, retention, or destinations.
 
-- **FHIR-aligned**  
+- FHIR-aligned
   Exported data preserves FHIR resource structure and semantics.
 
-- **Pluggable & extensible**  
+- Pluggable and extensible
   New formats can be added without impacting existing exporters.
 
 ---
 
-## 📦 Supported Export Formats (Ingestion Layer)
+## Supported Export Formats (Ingestion Layer)
 
 The following formats are supported or planned for ingestion workflows:
 
@@ -51,56 +51,60 @@ The following formats are supported or planned for ingestion workflows:
 | XML | FHIR interoperability support |
 | Turtle (RDF) | Semantic web and graph-based use cases |
 
-These formats are selected based on **FHIR standards** and **data engineering best practices**.
-
 FHIR defines data structure, not storage format.
 
 ---
 
-## 📂 Module Structure
+## Module Structure
 
 ```text
-src/fhirlake/exporters/
-├── __init__.py
-├── base.py              # Abstract exporter interface
-├── json_exporter.py     # FHIR JSON exporter
-├── ndjson_exporter.py   # NDJSON (FHIR Bulk-style)
-├── csv_exporter.py      # Flattened CSV exporter
-├── xml_exporter.py      # FHIR XML exporter (planned)
-└── turtle_exporter.py  # RDF / Turtle exporter (planned)
+Exporter/
++-- __init__.py
++-- JSON/
+�   +-- __init__.py
+�   +-- json_writer.py
++-- NDJSON/
+�   +-- __init__.py
+�   +-- ndjson_writer.py
++-- CSV/
+�   +-- __init__.py
+�   +-- csv_writer.py
++-- XML/
+�   +-- __init__.py
+�   +-- xml_writer.py
++-- Turtle/
+    +-- __init__.py
+    +-- turtle_writer.py
 ```
 
 ---
 
-## 🧩 Exporter Interface
+## Exporter Interface
 
-All exporters implement a shared interface defined in `base.py`.
+Each exporter exposes two functions:
+- `serialize_<format>(records)` returns string content
+- `plan_<format>_exports(store_resources, ...)` returns planned outputs
 
-Key characteristics:
-- Accepts a FHIR resource type and iterable of records
-- Returns serialized output as bytes
-- Stateless and reusable
-
-This ensures consistency across all formats.
+Storage writes are handled by the engine via `Storage.write_text()`.
 
 ---
 
-## 🔄 Typical Usage Flow
+## Typical Usage Flow
 
 ```text
-Generators → Exporter → Storage → Output Files
+Generators -> Exporter -> Storage -> Output Files
 ```
 
 ---
 
-## 🚦 Scope & Non-Goals
+## Scope and Non-Goals
 
-### In scope:
+In scope:
 - Serialization logic
 - Format-specific transformations
 - Ingestion-ready outputs
 
-### Out of scope:
+Out of scope:
 - File system access
 - Folder naming or retention policies
 - Dataset taxonomy or grouping
@@ -108,15 +112,14 @@ Generators → Exporter → Storage → Output Files
 
 ---
 
-## ➕ Adding a New Exporter
+## Adding a New Exporter
 
 To add a new format:
 
 1. Create a new exporter file in this directory
-2. Extend the base exporter interface
-3. Implement the `export()` method
-4. Register the exporter (if using a factory)
-5. Update documentation if needed
+2. Implement `serialize_<format>` and `plan_<format>_exports`
+3. Register the functions in `Exporter/__init__.py`
+4. Update documentation if needed
 
 New exporters must:
 - Preserve FHIR semantics
@@ -125,16 +128,16 @@ New exporters must:
 
 ---
 
-## 🔐 Compliance Notes
+## Compliance Notes
 
-- Exporters may be used with **synthetic or real data**
+- Exporters may be used with synthetic or real data
 - HIPAA and FHIR do not restrict file formats
 - Security and access control are handled outside this module
 
-This project uses **synthetic data only**.
+This project uses synthetic data only.
 
 ---
 
-## 📌 Guiding Principle
+## Guiding Principle
 
-> **Exporters define format, not governance.**
+Exporters define format, not governance.
