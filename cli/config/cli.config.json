@@ -1,0 +1,11 @@
+{
+  "allowed_resources": [
+    "Patient",
+    "Practitioner",
+    "Encounter",
+    "Condition",
+    "Location",
+    "Organization"
+  ],
+  "default_count": 10
+}
