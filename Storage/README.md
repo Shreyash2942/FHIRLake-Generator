@@ -1,149 +1,89 @@
-# 🗄️ Storage Module
+# Storage Module
 
-The **Storage module** is responsible for **persisting exported datasets** produced by the FHIRLake Generator project.
-
-This module defines *where and how data is saved*, while remaining completely agnostic to:
-- How data is generated (Generators)
-- How data is serialized (Exporters)
-- How datasets are defined (Dataset Contract)
-
-The Storage module is the **final step** in the FHIRLake data flow.
+The Storage module is responsible for persisting generated data to a destination.
+It also owns format serialization so that engines can stay storage-agnostic.
 
 ---
 
-## 🎯 Purpose
+## Backends
 
-The Storage module exists to:
-
-- Save exported datasets to a target destination
-- Enforce consistent folder and file naming conventions
-- Support multiple storage backends (local, cloud, etc.)
-- Enable reproducible, run-based outputs
-- Keep persistence logic isolated and reusable
-
-This module does **not** create data and does **not** format data.
+- Local filesystem: `Storage.local.LocalStorage`
+- Docker container: `Storage.docker.DockerStorage`
 
 ---
 
-## 🧠 Design Principles
-
-The Storage module follows these core principles:
-
-- **Storage-only responsibility**  
-  Handles file persistence only — no generation or serialization.
-
-- **Backend-agnostic**  
-  Supports local filesystem now; cloud backends (S3, ADLS, GCS) can be added later.
-
-- **Run-based isolation**  
-  Each execution writes to its own output directory.
-
-- **Safe writes**  
-  Uses atomic or overwrite-safe operations where possible.
-
-- **Dataset-first alignment**  
-  Output paths reflect dataset taxonomy and resource type.
-
----
-
-## 📂 Module Structure
+## Module Structure
 
 ```text
-src/fhirlake/storage/
-├── README.md
-├── writer.py              # Core save/write orchestration
-├── paths.py               # Output directory & file naming rules
-├── manifest.py            # Run metadata (optional but recommended)
-│
-└── backends/              # Storage backends
-    ├── __init__.py
-    ├── local_fs.py        # Local filesystem backend
-    └── s3.py              # Cloud backend (planned)
+Storage/
++-- __init__.py
++-- base/
+�   +-- __init__.py
+�   +-- base.py
++-- local/
+�   +-- __init__.py
+�   +-- local_storage.py
++-- docker/
+�   +-- __init__.py
+�   +-- docker_storage.py
++-- base.py          # shim for backward compatibility
++-- local.py         # shim for backward compatibility
 ```
 
 ---
 
-## 🧩 Responsibilities
+## Output Layout
 
-### What the Storage module DOES:
-- Create output directories
-- Write bytes/text to files
-- Organize outputs by run, format, and resource
-- Optionally write run manifests
+Files are written under per-format directories and grouped by resource type:
 
-### What the Storage module DOES NOT do:
-- Generate synthetic data
-- Convert data formats
-- Define dataset taxonomy
-- Apply business logic or validation
-
----
-
-## 🔄 Typical Data Flow
-
-```text
-Generators → Exporters → Storage → Output Files
+```
+output/
+  json/patient/patient-<timestamp>.json
+  ndjson/patient/patient-<timestamp>.ndjson
+  csv/patient/patient-<timestamp>.csv
+  xml/patient/patient-<timestamp>.xml
+  turtle/patient/patient-<timestamp>.ttl
+  logs/<timestamp>/engine.log
+  summary/<timestamp>/run_summary_<timestamp>_<run_id>.json
 ```
 
 ---
 
-## 📁 Example Output Layout
+## Docker Storage
 
-```text
-data/output/
-└── run_2026-02-01T140512Z/
-    ├── json/
-    │   └── Patient.json
-    ├── ndjson/
-    │   └── Patient.ndjson
-    ├── csv/
-    │   └── patients.csv
-    ├── xml/
-    │   └── Patient.xml
-    ├── turtle/
-    │   └── Patient.ttl
-    └── manifest.json
+`DockerStorage` writes files into a running container using the docker CLI.
+
+Required arguments:
+- `container_name`: name or ID of the running container
+- `container_base_dir`: base directory inside the container (default: `/output`)
+
+By default it validates the container exists and is running. You can disable
+that check with `validate_container=False` or `--docker-skip-validate`.
+
+When using Docker storage for exports only, you can avoid creating metadata,
+summary, and log folders inside the container by setting:
+- `create_metadata_dir=False`
+- `create_summary_dir=False`
+- `create_log_dir=False`
+
+Example usage:
+
+```python
+from Storage import DockerStorage
+
+storage = DockerStorage(
+    container_name="fhirlake",
+    container_base_dir="/data/fhirlake",
+    create_metadata_dir=False,
+    create_summary_dir=False,
+    create_log_dir=False,
+)
 ```
 
 ---
 
-## 📄 Run Manifest (Optional)
+## Notes
 
-The Storage module may generate a **manifest file** per run containing:
-
-- Run ID and timestamp
-- Dataset profile used
-- Resources generated and record counts
-- Export formats
-- Notes or metadata
-
-Manifests improve:
-- Auditability
-- Debugging
-- Reproducibility
-
----
-
-## 🔐 Compliance & Safety
-
-- Storage supports **synthetic data** by default
-- HIPAA and FHIR do not restrict storage formats
-- Access control and encryption are backend responsibilities
-- This project does not store real PHI
-
----
-
-## ➕ Adding a New Storage Backend
-
-To add a new backend (e.g., S3):
-
-1. Create a new backend module under `backends/`
-2. Implement the required write interface
-3. Keep backend logic isolated from exporters and generators
-4. Update documentation if needed
-
----
-
-## 📌 Guiding Principle
-
-> **Storage defines where data lives — not what it is or how it looks.**
+- The `base.py` and `local.py` files at the Storage root are shims to preserve
+  existing imports.
+- The engine selects formats; storage writes and serializes the output.
