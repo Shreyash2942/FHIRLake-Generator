@@ -101,7 +101,7 @@ def generate(ctx, config) -> list[dict]:
     """
     Generate FHIR resources for this resource type.
 
-    - ctx: RunContext from Core (shared state + pools)
+    - ctx: RunContext from core (shared state + pools)
     - config: merged defaults + profile overrides
     """
     ...
