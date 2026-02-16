@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
+from Exporter.naming import default_filename_base, plan_export_paths, resolve_filename_override
 
 JsonDict = Dict[str, Any]
+
+
+def _json_default(o: Any):
+    if isinstance(o, (datetime, date)):
+        return o.isoformat()
+    if hasattr(o, "model_dump"):
+        return o.model_dump(exclude_none=True)
+    return str(o)
 
 
 def write_json_array(records: List[JsonDict], out_path: str | Path, indent: int = 2) -> Path:
@@ -17,32 +27,66 @@ def write_json_array(records: List[JsonDict], out_path: str | Path, indent: int 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     with out_path.open("w", encoding="utf-8") as f:
-        json.dump(records, f, ensure_ascii=False, indent=indent)
+        json.dump(records, f, ensure_ascii=False, indent=indent, default=_json_default)
 
     return out_path
 
 
-def write_json_by_bucket(
+
+def serialize_json_array(records: List[JsonDict], indent: int = 2) -> str:
+    return json.dumps(records, ensure_ascii=False, indent=indent, default=_json_default)
+
+
+def plan_json_exports(
     store_resources: Dict[str, List[JsonDict]],
-    out_dir: str | Path,
+    *,
     filename_map: Dict[str, str] | None = None,
     indent: int = 2,
-) -> Dict[str, Path]:
+    timestamp_utc: str,
+    run_id: str,
+) -> Dict[str, Tuple[Path, str]]:
     """
-    Writes each ResourceStore bucket as JSON array files:
-      - patients -> patients.json
-      - encounters -> encounters.json
-      - conditions -> conditions.json
-    """
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    Plan JSON exports without writing files.
 
+    Returns:
+      bucket -> (relative_path, json_text)
+    """
     filename_map = filename_map or {}
-    outputs: Dict[str, Path] = {}
+    outputs: Dict[str, Tuple[Path, str]] = {}
 
     for bucket, records in store_resources.items():
-        fname = filename_map.get(bucket, f"{bucket}.json")
-        path = out_dir / fname
-        outputs[bucket] = write_json_array(records, path, indent=indent)
+        default_base = default_filename_base(bucket, records)
+        fname = resolve_filename_override(
+            filename_map.get(bucket),
+            timestamp_utc=timestamp_utc,
+            run_id=run_id,
+        )
+        if fname:
+            rel_path = Path(fname)
+        else:
+            rel_path = Path(default_base) / f"{default_base}_{timestamp_utc}.json"
+        outputs[bucket] = (rel_path, serialize_json_array(records, indent=indent))
 
     return outputs
+
+
+def plan_json_paths(
+    store_resources: Dict[str, List[JsonDict]],
+    *,
+    filename_map: Dict[str, str] | None = None,
+    timestamp_utc: str,
+    run_id: str,
+) -> Dict[str, Path]:
+    """
+    Plan JSON export paths without serialization.
+
+    Returns:
+      bucket -> relative_path
+    """
+    return plan_export_paths(
+        store_resources,
+        filename_map=filename_map,
+        timestamp_utc=timestamp_utc,
+        run_id=run_id,
+        extension=".json",
+    )

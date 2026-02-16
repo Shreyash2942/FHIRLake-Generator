@@ -1,3 +1,3 @@
-from .ndjson_writer import  write_ndjson_by_bucket, write_ndjson
+from .ndjson_writer import plan_ndjson_exports, plan_ndjson_paths, serialize_ndjson
 
-__all__ = ["write_ndjson_by_bucket", "write_ndjson"]
+__all__ = ["plan_ndjson_exports", "plan_ndjson_paths", "serialize_ndjson"]
