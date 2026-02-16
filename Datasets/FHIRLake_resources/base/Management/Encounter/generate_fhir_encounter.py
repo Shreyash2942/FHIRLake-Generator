@@ -87,7 +87,7 @@ def make_codeable_reference(display_text: str, ref: str = None):
 # ---------------------------------------------------------------------
 # Legacy single-resource builder (kept for reuse)
 # ---------------------------------------------------------------------
-def generate_encounter(patient_id: str) -> FHIREncounter:
+def generate_encounter(patient_id: str, practitioner_id: str | None = None) -> FHIREncounter:
     """
     Generates a FHIR R5 Encounter resource for a given patient.
     This is the legacy single-resource creator.
@@ -166,10 +166,11 @@ def generate_encounter(patient_id: str) -> FHIREncounter:
     # ----------------------------
     # Participant
     # ----------------------------
+    actor_id = practitioner_id or str(uuid.uuid4())
     participant = EncounterParticipant(
         type=[cc_text(random.choice(PARTICIPANT_ROLES))],
         period=Period(start=admission, end=discharge),
-        actor=make_ref(reference=f"Practitioner/{uuid.uuid4()}")
+        actor=make_ref(reference=f"Practitioner/{actor_id}")
     )
 
     # ----------------------------
@@ -377,6 +378,7 @@ def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, A
     resources: List[Dict[str, Any]] = []
 
     patient_id = inputs.get("patient_id")
+    practitioner_id = inputs.get("practitioner_id")
     if not patient_id:
         raise ValueError(
             "Encounter generator requires inputs['patient_id']. "
@@ -384,7 +386,7 @@ def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, A
         )
 
     for _ in range(int(count)):
-        enc_obj = generate_encounter(patient_id)
+        enc_obj = generate_encounter(patient_id, practitioner_id=practitioner_id)
 
         # Convert FHIR model -> dict safely
         if hasattr(enc_obj, "model_dump"):

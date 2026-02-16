@@ -169,9 +169,14 @@ def build_severity() -> CodeableConcept:
 # ---------------------------------------------------------------------
 # Legacy single-resource builder (kept for reuse)
 # ---------------------------------------------------------------------
-def generate_condition(patient_id: str, encounter_id: str) -> Condition:
+def generate_condition(
+    patient_id: str,
+    encounter_id: str,
+    practitioner_id: str | None = None,
+) -> Condition:
     patient_id = str(patient_id)
     encounter_id = str(encounter_id)
+    recorder_id = practitioner_id or str(uuid.uuid4())
 
     onset_dt = fake.date_time_this_year(tzinfo=timezone.utc)
     abatement_dt = onset_dt + timedelta(days=random.randint(1, 10))
@@ -261,6 +266,7 @@ def generate_condition(patient_id: str, encounter_id: str) -> Condition:
         "encounter": Reference(reference=f"Encounter/{encounter_id}"),
 
         "recordedDate": fhir_datetime(onset_dt),
+        "recorder": Reference(reference=f"Practitioner/{recorder_id}"),
 
         "stage": [
             {
@@ -301,6 +307,7 @@ def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, A
 
     patient_id = inputs.get("patient_id")
     encounter_id = inputs.get("encounter_id")
+    practitioner_id = inputs.get("practitioner_id")
 
     if not patient_id or not encounter_id:
         raise ValueError(
@@ -310,7 +317,7 @@ def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, A
         )
 
     for _ in range(int(count)):
-        cond_obj = generate_condition(patient_id, encounter_id)
+        cond_obj = generate_condition(patient_id, encounter_id, practitioner_id=practitioner_id)
 
         # Convert FHIR model -> dict safely
         if hasattr(cond_obj, "model_dump"):

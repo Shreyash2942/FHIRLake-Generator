@@ -488,8 +488,18 @@ def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, A
     resources: List[Dict[str, Any]] = []
     gen = LocationGenerator(seed=getattr(ctx, "seed", None))
 
+    org_id = inputs.get("organization_id")
+    if not org_id:
+        raise ValueError(
+            "Location generator requires inputs['organization_id']. "
+            "Fix: registry spec.required_inputs must include 'organization_id' "
+            "and Planning dependencies must include 'Organization'."
+        )
+
     for _ in range(int(count)):
-        loc_obj = gen.generate_location()
+        loc_obj = gen.generate_location(
+            managing_org_ref=f"Organization/{org_id}"
+        )
 
         if hasattr(loc_obj, "model_dump"):
             loc_dict = loc_obj.model_dump(exclude_none=True)
