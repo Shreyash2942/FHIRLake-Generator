@@ -54,6 +54,15 @@ def note_kv(key: str, value: str) -> Annotation:
     return Annotation(authorString=key, text=str(value))
 
 
+def model_supports_field(model_cls: object, field_name: str) -> bool:
+    """Return True if Pydantic model supports the field name."""
+    if hasattr(model_cls, "model_fields"):
+        return field_name in getattr(model_cls, "model_fields", {})
+    if hasattr(model_cls, "__fields__"):
+        return field_name in getattr(model_cls, "__fields__", {})
+    return False
+
+
 # ----------------------------
 # Helper: onset[x] (choose ONE)
 # ----------------------------
@@ -266,7 +275,6 @@ def generate_condition(
         "encounter": Reference(reference=f"Encounter/{encounter_id}"),
 
         "recordedDate": fhir_datetime(onset_dt),
-        "recorder": Reference(reference=f"Practitioner/{recorder_id}"),
 
         "stage": [
             {
@@ -283,6 +291,10 @@ def generate_condition(
     # Add onset[x] and abatement[x] correctly (only one of each)
     condition_data.update(build_onset(onset_dt))
     condition_data.update(build_abatement(abatement_dt))
+
+    # Some FHIR builds (R5) do not support recorder on Condition.
+    if model_supports_field(Condition, "recorder"):
+        condition_data["recorder"] = Reference(reference=f"Practitioner/{recorder_id}")
 
     return Condition(**condition_data)
 

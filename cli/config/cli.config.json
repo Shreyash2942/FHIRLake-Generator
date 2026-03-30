@@ -5,7 +5,13 @@
     "Encounter",
     "Condition",
     "Location",
-    "Organization"
+    "Organization",
+    "Observation",
+    "Coverage",
+    "MedicationRequest",
+    "Claim",
+    "Procedure"
+
   ],
   "default_count": 10
 }

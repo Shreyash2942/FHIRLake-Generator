@@ -264,7 +264,11 @@ def run_engine(
     timestamp_utc = str(summary.get("timestamp_utc"))
 
     # 2) Prepare storage run layout (exports)
-    paths = storage.prepare_run(run_id=run_id, timestamp_utc=timestamp_utc)
+    paths = storage.prepare_run(
+        run_id=run_id,
+        timestamp_utc=timestamp_utc,
+        formats=_normalize_formats(export.formats),
+    )
 
     # Logs and summary should stay local unless storage is already local.
     log_storage: StorageBackend
@@ -273,7 +277,11 @@ def run_engine(
         log_paths = paths
     else:
         log_storage = LocalStorage(base_dir="output", versioned=False, layout="flat")
-        log_paths = log_storage.prepare_run(run_id=run_id, timestamp_utc=timestamp_utc)
+        log_paths = log_storage.prepare_run(
+            run_id=run_id,
+            timestamp_utc=timestamp_utc,
+            formats=_normalize_formats(export.formats),
+        )
 
     # 3) Engine logger
     logger, engine_log_path = _init_engine_logger(

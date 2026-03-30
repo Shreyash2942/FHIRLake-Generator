@@ -72,7 +72,12 @@ class DockerStorage(StorageBackend):
         if running != "true":
             raise RuntimeError(f"Docker container '{self.container_name}' is not running.")
 
-    def prepare_run(self, run_id: str, timestamp_utc: str) -> RunPaths:
+    def prepare_run(
+        self,
+        run_id: str,
+        timestamp_utc: str,
+        formats: tuple[str, ...] | None = None,
+    ) -> RunPaths:
         if self.layout == "run":
             folder_name = f"{run_id}__{timestamp_utc}" if self.versioned else run_id
             run_root = self.container_base_dir / folder_name
@@ -88,14 +93,22 @@ class DockerStorage(StorageBackend):
         summary_dir = self.container_base_dir / "summary" / timestamp_utc
         log_dir = self.container_base_dir / "logs" / timestamp_utc
 
-        for d in [
-            fhir_json_dir,
-            fhir_ndjson_dir,
-            fhir_csv_dir,
-            fhir_xml_dir,
-            fhir_turtle_dir,
-        ]:
-            self._ensure_dir(d)
+        selected = None
+        if formats is not None:
+            selected = {f.lower().strip() for f in formats if str(f).strip()}
+            if "none" in selected:
+                selected = set()
+
+        if selected is None or "json" in selected:
+            self._ensure_dir(fhir_json_dir)
+        if selected is None or "ndjson" in selected:
+            self._ensure_dir(fhir_ndjson_dir)
+        if selected is None or "csv" in selected:
+            self._ensure_dir(fhir_csv_dir)
+        if selected is None or "xml" in selected:
+            self._ensure_dir(fhir_xml_dir)
+        if selected is None or "turtle" in selected or "ttl" in selected:
+            self._ensure_dir(fhir_turtle_dir)
         if self.create_metadata_dir:
             self._ensure_dir(metadata_dir)
         if self.create_summary_dir:

@@ -60,7 +60,12 @@ class LocalStorage(StorageBackend):
         self.versioned = versioned
         self.layout = layout
 
-    def prepare_run(self, run_id: str, timestamp_utc: str) -> RunPaths:
+    def prepare_run(
+        self,
+        run_id: str,
+        timestamp_utc: str,
+        formats: tuple[str, ...] | None = None,
+    ) -> RunPaths:
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
         if self.layout == "run":
@@ -79,11 +84,23 @@ class LocalStorage(StorageBackend):
         log_dir = self.base_dir / "logs" / timestamp_utc
 
         metadata_dir.mkdir(parents=True, exist_ok=True)
-        fhir_json_dir.mkdir(parents=True, exist_ok=True)
-        fhir_ndjson_dir.mkdir(parents=True, exist_ok=True)
-        fhir_csv_dir.mkdir(parents=True, exist_ok=True)
-        fhir_xml_dir.mkdir(parents=True, exist_ok=True)
-        fhir_turtle_dir.mkdir(parents=True, exist_ok=True)
+
+        selected = None
+        if formats is not None:
+            selected = {f.lower().strip() for f in formats if str(f).strip()}
+            if "none" in selected:
+                selected = set()
+
+        if selected is None or "json" in selected:
+            fhir_json_dir.mkdir(parents=True, exist_ok=True)
+        if selected is None or "ndjson" in selected:
+            fhir_ndjson_dir.mkdir(parents=True, exist_ok=True)
+        if selected is None or "csv" in selected:
+            fhir_csv_dir.mkdir(parents=True, exist_ok=True)
+        if selected is None or "xml" in selected:
+            fhir_xml_dir.mkdir(parents=True, exist_ok=True)
+        if selected is None or "turtle" in selected or "ttl" in selected:
+            fhir_turtle_dir.mkdir(parents=True, exist_ok=True)
         summary_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
 

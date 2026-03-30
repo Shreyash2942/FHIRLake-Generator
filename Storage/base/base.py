@@ -47,7 +47,12 @@ class StorageBackend:
 
     # ---------- Run lifecycle ----------
 
-    def prepare_run(self, run_id: str, timestamp_utc: str) -> RunPaths:  # pragma: no cover
+    def prepare_run(
+        self,
+        run_id: str,
+        timestamp_utc: str,
+        formats: tuple[str, ...] | None = None,
+    ) -> RunPaths:  # pragma: no cover
         raise NotImplementedError
 
     def write_run_summary(self, paths: RunPaths, summary: Dict[str, Any]) -> Path:  # pragma: no cover

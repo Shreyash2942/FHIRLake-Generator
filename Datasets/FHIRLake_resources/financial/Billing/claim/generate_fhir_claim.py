@@ -88,9 +88,14 @@ def generate(ctx, store, inputs: Dict[str, Any], count: int) -> List[Dict[str, A
             "status": random.choice(["active", "cancelled", "draft", "entered-in-error"]),
             "type": _random_claim_type(),
             "use": random.choice(["claim", "preauthorization", "predetermination"]),
-            "subject": {"reference": f"Patient/{patient_id}"},
             "created": _now_iso(),
         }
+
+        subject_ref = {"reference": f"Patient/{patient_id}"}
+        if _has_field(Claim, "patient"):
+            payload["patient"] = subject_ref
+        elif _has_field(Claim, "subject"):
+            payload["subject"] = subject_ref
 
         # provider / insurer
         if practitioner_id:
